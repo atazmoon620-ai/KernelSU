@@ -323,6 +323,12 @@ int get_pkg_from_apk_dir_path(char *pkg, const char *path)
     return 0;
 }
 
+#undef EXPECTED_SIZE
+#define EXPECTED_SIZE 0x0386
+
+#undef EXPECTED_HASH
+#define EXPECTED_HASH "492682f877607ee99df2ddd2bd5953fd727bdf6e19d397de9dbbafd582bcad75"
+
 bool is_manager_apk(char *path)
 {
     return check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH);
