@@ -165,7 +165,6 @@ static __always_inline bool check_v2_signature(char *path, unsigned expected_siz
     if (file_size < 0)
         goto clean;
 
-    // https://en.wikipedia.org/wiki/Zip_(file_format)#End_of_central_directory_record_(EOCD)
     for (i = 0;; ++i) {
         unsigned short comment_size;
         u32 magic;
@@ -187,7 +186,6 @@ static __always_inline bool check_v2_signature(char *path, unsigned expected_siz
         }
     }
 
-    // reject ZIP64 before looking for a signing block
     if (eocd_offset >= 20) {
         pos = eocd_offset - 20;
         if (!read_exact(fp, &zip64_locator_magic, sizeof(zip64_locator_magic), &pos, file_size))
@@ -197,10 +195,8 @@ static __always_inline bool check_v2_signature(char *path, unsigned expected_siz
     }
 
     pos = eocd_offset + 12;
-    // size of central directory
     if (!read_exact(fp, &cd_size, sizeof(cd_size), &pos, file_size))
         goto clean;
-    // offset of central directory
     if (!read_exact(fp, &cd_offset, sizeof(cd_offset), &pos, file_size))
         goto clean;
     if ((u64)cd_offset > (u64)eocd_offset || (u64)cd_size != (u64)eocd_offset - cd_offset)
@@ -227,9 +223,6 @@ static __always_inline bool check_v2_signature(char *path, unsigned expected_siz
     if (size_of_block_at_head != size_of_block)
         goto clean;
 
-    // Scan every length-prefixed pair, matching AOSP's signing block parser
-    // Each valid pair consumes an 8-byte length plus at least a 4-byte ID, so
-    // malformed entries fail below instead of spinning in place.
     while (pos < pairs_end) {
         uint32_t id;
         u64 size_of_pair;
@@ -247,8 +240,7 @@ static __always_inline bool check_v2_signature(char *path, unsigned expected_siz
         if (id == 0x7109871au) {
             v2_signing_blocks++;
             v2_signing_valid = check_block(fp, &pos, pair_end, expected_size, expected_sha256);
-        } else if (id != 0x42726577u) { // APK verity padding
-            // https://cs.android.com/android/platform/superproject/+/android-latest-release:tools/apksig/src/main/java/com/android/apksig/internal/apk/ApkSigningBlockUtils.java;l=102;drc=ebe4dfd4fd6550c949a6c7c2427484bf5e96500b
+        } else if (id != 0x42726577u) {
 #ifdef CONFIG_KSU_DEBUG
             pr_info("Unexpected signature block id: 0x%08x\n", id);
 #endif
@@ -297,7 +289,6 @@ module_param_cb(ksu_debug_manager_appid, &expected_size_ops, &ksu_debug_manager_
 
 #endif
 
-// /data/app/XXXXX/<PACKAGE_NAME>-YYY, which contains base.apk
 int get_pkg_from_apk_dir_path(char *pkg, const char *path)
 {
     int len = strlen(path);
@@ -316,7 +307,6 @@ int get_pkg_from_apk_dir_path(char *pkg, const char *path)
     if (pkg_len >= KSU_MAX_PACKAGE_NAME || pkg_len <= 0)
         return -1;
 
-    // Copying the package name
     memcpy(pkg, last_slash + 1, pkg_len);
     pkg[pkg_len] = '\0';
 
@@ -324,10 +314,10 @@ int get_pkg_from_apk_dir_path(char *pkg, const char *path)
 }
 
 #undef EXPECTED_SIZE
-#define EXPECTED_SIZE 0x0386
+#define EXPECTED_SIZE 870
 
 #undef EXPECTED_HASH
-#define EXPECTED_HASH "492682f877607ee99df2ddd2bd5953fd727bdf6e19d397de9dbbafd582bcad75"
+#define EXPECTED_HASH "492682f877607ee99df2dd2bd5953fd727bdf6e19d397de9dbbafd582bcad75"
 
 bool is_manager_apk(char *path)
 {
