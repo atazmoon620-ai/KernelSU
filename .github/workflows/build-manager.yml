@@ -35,6 +35,7 @@ on:
       - 'userspace/**'
       - 'Cargo.lock'
       - 'Cargo.toml'
+  workflow_dispatch:
   workflow_call:
 
 jobs:
@@ -150,14 +151,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Write key
         if: ${{ ( github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' )) || github.ref_type == 'tag' }}
         run: |
-          if [ ! -z "${{ secrets.KEYSTORE }}" ]; then
+          if [ -n "${{ secrets.KEYSTORE }}" ]; then
             {
               echo KEYSTORE_PASSWORD='${{ secrets.KEYSTORE_PASSWORD }}'
               echo KEY_ALIAS='${{ secrets.KEY_ALIAS }}'
@@ -165,6 +166,22 @@ jobs:
               echo KEYSTORE_FILE='key.jks'
             } >> gradle.properties
             echo "${{ secrets.KEYSTORE }}" | base64 -d > key.jks
+          else
+            keytool -genkeypair \
+              -alias release-key \
+              -keyalg RSA -keysize 2048 \
+              -validity 10000 \
+              -storepass "android" \
+              -keypass "android" \
+              -dname "CN=KernelSU" \
+              -storetype JKS \
+              -keystore release.jks
+            {
+              echo KEYSTORE_PASSWORD='android'
+              echo KEY_ALIAS='release-key'
+              echo KEY_PASSWORD='android'
+              echo KEYSTORE_FILE='release.jks'
+            } >> gradle.properties
           fi
 
       - name: Write PR key
@@ -183,13 +200,13 @@ jobs:
           } >> gradle.properties
 
       - name: Setup Java
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@v3
 
       - name: Build with Gradle
         run: |
@@ -201,13 +218,13 @@ jobs:
 
       - name: Upload build artifact
         if: ${{ github.event_name == 'pull_request' || (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) || github.ref_type == 'tag' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: manager-gradle
           path: manager/app/build/outputs/apk/release/*.apk
 
       - name: Upload mappings
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         if: ${{ ( github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' )) || github.ref_type == 'tag' }}
         with:
           name: "mappings"
@@ -220,39 +237,39 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup need_upload
         id: need_upload
         run: |
-          if [ ! -z "${{ secrets.BOT_TOKEN }}" ]; then
+          if [ -n "${{ secrets.BOT_TOKEN }}" ]; then
             echo "UPLOAD=true" >> $GITHUB_OUTPUT
           else
             echo "UPLOAD=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Download gradle manager artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: manager-gradle
           path: artifacts/manager-gradle
 
       - name: Download arm64 ksud
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: ksud-aarch64-linux-android
           path: artifacts/ksud-aarch64-linux-android
 
       - name: Download x86_64 ksud
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: ksud-x86_64-linux-android
           path: artifacts/ksud-x86_64-linux-android
 
       - name: Download RISC-V ksud
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: ksud-riscv64-linux-android
           path: artifacts/ksud-riscv64-linux-android
@@ -294,13 +311,26 @@ jobs:
             echo "SIGN_KEY_ALIAS=pr-key" >> $GITHUB_ENV
             echo "SIGN_KEYSTORE_PASSWORD=$PR_KEYSTORE_PASSWORD" >> $GITHUB_ENV
             echo "SIGN_KEY_PASSWORD=$PR_KEY_PASSWORD" >> $GITHUB_ENV
-          else
-            test -n "$PROD_KEYSTORE"
+          elif [ -n "$PROD_KEYSTORE" ]; then
             echo "$PROD_KEYSTORE" | base64 -d > key.jks
             echo "SIGN_KEYSTORE_FILE=key.jks" >> $GITHUB_ENV
             echo "SIGN_KEY_ALIAS=$PROD_KEY_ALIAS" >> $GITHUB_ENV
             echo "SIGN_KEYSTORE_PASSWORD=$PROD_KEYSTORE_PASSWORD" >> $GITHUB_ENV
             echo "SIGN_KEY_PASSWORD=$PROD_KEY_PASSWORD" >> $GITHUB_ENV
+          else
+            keytool -genkeypair \
+              -alias release-key \
+              -keyalg RSA -keysize 2048 \
+              -validity 10000 \
+              -storepass "android" \
+              -keypass "android" \
+              -dname "CN=KernelSU" \
+              -storetype JKS \
+              -keystore release.jks
+            echo "SIGN_KEYSTORE_FILE=release.jks" >> $GITHUB_ENV
+            echo "SIGN_KEY_ALIAS=release-key" >> $GITHUB_ENV
+            echo "SIGN_KEYSTORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "SIGN_KEY_PASSWORD=android" >> $GITHUB_ENV
           fi
 
       - name: Repack and resign
@@ -320,7 +350,7 @@ jobs:
 
       - name: Upload build artifact
         if: ${{ github.event_name == 'pull_request' || (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) || github.ref_type == 'tag' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: manager
           path: dist/*.apk
@@ -336,9 +366,10 @@ jobs:
           TITLE: Manager
           BRANCH: ${{ github.ref_name }}
         run: |
-          if [ ! -z "${{ secrets.BOT_TOKEN }}" ]; then
+          if [ -n "${{ secrets.BOT_TOKEN }}" ]; then
             export VERSION=$(git rev-list --count HEAD)
             APK=$(find ./dist -name "*.apk")
             pip3 install telethon
             python3 $GITHUB_WORKSPACE/scripts/ksubot.py $APK
           fi
+          
