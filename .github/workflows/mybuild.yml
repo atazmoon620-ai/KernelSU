@@ -61,7 +61,7 @@ jobs:
       - name: apk
         env: { KSU_PACKAGE_NAME: com.chess }
         run: |
-          ./gradlew :manager:app:assembleRelease --no-daemon || ./gradlew assembleRelease --no-daemon
+./gradlew :manager:app:assembleRelease --no-daemon -PKSU_PACKAGE_NAME=com.chess -PKSU_NAME=Chess || ./gradlew assembleRelease --no-daemon -PKSU_PACKAGE_NAME=com.chess -PKSU_NAME=Chess
           find . -path '*outputs/apk*' -name '*.apk'
       - name: sign + verify
         run: |
